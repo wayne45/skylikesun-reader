@@ -13,6 +13,11 @@ A static web page for tracking which posts of https://skylikesun.blogspot.com yo
 | `fetch_posts.py` | Fetches the Blogger feed and merges new posts into `posts.json` |
 | `.github/workflows/update-posts.yml` | Runs `fetch_posts.py` twice a day (11:50 and 23:50 Asia/Taipei) and commits changes |
 
+## Ways to use it
+
+- **Online**: open https://wayne45.github.io/skylikesun-reader/ directly. On a phone you can add it to the home screen.
+- **Locally**: follow the steps below.
+
 ## Run locally
 
 ```bash
@@ -28,11 +33,9 @@ Your progress is stored in the browser (localStorage) first, so it works offline
 
 ### 1. Create a token with only the `gist` scope
 
-GitHub CLI cannot create personal access tokens, so use the web page. This link pre-selects the scope and name:
+GitHub CLI cannot create personal access tokens, so use the web page. Click the URL below; the scope and name are pre-selected:
 
-```bash
-open "https://github.com/settings/tokens/new?scopes=gist&description=skylikesun-reader"
-```
+https://github.com/settings/tokens/new?scopes=gist&description=skylikesun-reader
 
 1. Choose an expiration (when it expires, sync fails until you create a new token).
 2. Make sure **only `gist`** is checked.

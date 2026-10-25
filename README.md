@@ -13,6 +13,11 @@
 | `fetch_posts.py` | 抓取 Blogger feed，把新文章合併進 `posts.json` |
 | `.github/workflows/update-posts.yml` | 每天兩次（台灣時間 11:50 和 23:50）執行 `fetch_posts.py`，有變動就自動 commit |
 
+## 使用方式選擇
+
+- **線上網頁**：直接開啟 https://wayne45.github.io/skylikesun-reader/ ，手機也可以加到主畫面。
+- **本機執行**：照下面的步驟。
+
 ## 本機執行
 
 ```bash
@@ -28,11 +33,9 @@ python3 -m http.server 8000       # 然後開啟 http://localhost:8000
 
 ### 1. 建立只有 `gist` 權限的 token
 
-GitHub CLI 無法建立 personal access token，請用網頁建立。下面的連結已預先選好權限和名稱：
+GitHub CLI 無法建立 personal access token，請用網頁建立。點下面的網址，權限和名稱已預先選好：
 
-```bash
-open "https://github.com/settings/tokens/new?scopes=gist&description=skylikesun-reader"
-```
+https://github.com/settings/tokens/new?scopes=gist&description=skylikesun-reader
 
 1. 選擇有效期限（token 過期後同步會失敗，需要重新建立）。
 2. 確認**只勾選 `gist`**。
