@@ -1,0 +1,41 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE / editor
+.idea/
+.vscode/
+*.swp
+*.iml
+.junie/
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Logs / temp
+*.log
+tmp/
+.cache/
+
+# Dependencies / build output
+node_modules/
+.venv/
+venv/
+__pycache__/
+*.pyc
+dist/
+build/
+target/
+coverage/
+
+# Claude Code local files
+.claude/
+.claude/settings.local.json
+
+# Spec Kit (spec-driven development)
+.specify/
+specs/

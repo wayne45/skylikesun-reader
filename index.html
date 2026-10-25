@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#1f2937">
+<title>skylikesun 閱讀器</title>
+<style>
+:root{--bg:#f6f7f9;--fg:#111827;--card:#fff;--mut:#6b7280;--line:#e5e7eb;--acc:#2563eb;--read:#16a34a;--skip:#9ca3af}
+@media(prefers-color-scheme:dark){:root{--bg:#111827;--fg:#f3f4f6;--card:#1f2937;--mut:#9ca3af;--line:#374151;--acc:#60a5fa;--read:#4ade80;--skip:#6b7280}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.4 -apple-system,BlinkMacSystemFont,"PingFang TC","Noto Sans TC",sans-serif;padding-bottom:env(safe-area-inset-bottom)}
+header{position:sticky;top:0;z-index:5;background:var(--card);border-bottom:1px solid var(--line);padding:8px 12px}
+.stats{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:14px}
+.stats b{font-size:16px}
+.stats .sp{flex:1}
+.filters{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:6px;margin-top:8px}
+input,select,button,textarea{font:inherit;color:inherit;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:8px;min-height:40px}
+button{cursor:pointer}
+button.pri{background:var(--acc);color:#fff;border-color:var(--acc)}
+button.danger{color:#dc2626}
+#q{grid-column:1/-1}
+main{max-width:900px;margin:0 auto;padding:8px 8px 80px}
+.row{display:flex;gap:8px;align-items:center;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px;margin:6px 0;touch-action:pan-y}
+.row .body{flex:1;min-width:0}
+.row a{color:var(--fg);text-decoration:none;font-weight:500;word-break:break-word}
+.row.read a{color:var(--mut)}
+.row.read{border-left:4px solid var(--read)}
+.row.skip{border-left:4px solid var(--skip);opacity:.6}
+.row.skip a{text-decoration:line-through}
+.meta{font-size:12px;color:var(--mut);margin-top:3px;word-break:break-word}
+.chip{display:inline-block;background:var(--bg);border:1px solid var(--line);border-radius:99px;padding:0 7px;margin-right:4px;font-size:12px}
+.st{min-width:52px;min-height:48px;font-size:14px}
+.st.read{color:var(--read);border-color:var(--read)}
+.cat{min-height:48px;padding:0 10px}
+.bar{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:8px 0;font-size:14px}
+dialog{border:1px solid var(--line);border-radius:12px;background:var(--card);color:var(--fg);max-width:420px;width:92vw}
+dialog::backdrop{background:#0006}
+dialog label{display:flex;gap:8px;align-items:center;padding:6px 0}
+dialog label input[type=checkbox]{min-height:0;width:20px;height:20px}
+dialog .actions{display:flex;gap:8px;justify-content:flex-end;margin-top:12px;flex-wrap:wrap}
+.catrow{display:flex;gap:6px;margin:6px 0}
+.catrow input{flex:1;min-width:0}
+#toast{position:fixed;left:50%;bottom:calc(16px + env(safe-area-inset-bottom));transform:translateX(-50%);background:#111827;color:#fff;border-radius:10px;padding:10px 14px;display:none;gap:10px;align-items:center;z-index:20;max-width:92vw}
+#toast button{min-height:32px;padding:2px 10px;background:#374151;color:#fff;border-color:#4b5563}
+.mut{color:var(--mut);font-size:13px}
+#sync{font-size:12px;color:var(--mut)}
+</style>
+</head>
+<body>
+<header>
+  <div class="stats">
+    <span>未讀 <b id="nU">0</b></span><span>已讀 <b id="nR">0</b></span><span>略過 <b id="nK">0</b></span>
+    <span class="sp"></span>
+    <span id="sync"></span>
+    <button id="btnMenu">⚙︎</button>
+  </div>
+  <div class="filters">
+    <input id="q" type="search" placeholder="搜尋標題…">
+    <select id="fStatus"><option value="">全部狀態</option><option value="u">未讀</option><option value="r">已讀</option><option value="k">略過</option></select>
+    <select id="fLabel"></select>
+    <select id="fCat"></select>
+    <select id="fMonth"></select>
+    <select id="fSort"><option value="d">新到舊</option><option value="a">舊到新</option></select>
+  </div>
+</header>
+<main>
+  <div class="bar" id="bulk"></div>
+  <div id="list"></div>
+  <div class="bar"><button id="more" style="display:none">顯示更多</button></div>
+</main>
+
+<div id="toast"><span id="toastMsg"></span><button id="toastBtn"></button></div>
+
+<dialog id="dlgCats"><form method="dialog">
+  <h3 style="margin-top:0" id="dlgCatsTitle">分類</h3>
+  <div id="catsBody"></div>
+  <div class="catrow"><input id="newCat" placeholder="新分類名稱"><button type="button" id="addCat">新增</button></div>
+  <div class="actions"><button class="pri" value="ok">完成</button></div>
+</form></dialog>
+
+<dialog id="dlgMenu"><form method="dialog">
+  <h3 style="margin-top:0">設定</h3>
+  <label><input type="checkbox" id="autoRead"> 點開文章時自動標為已讀</label>
+  <div class="actions" style="justify-content:flex-start"><button type="button" id="manageCats">管理分類</button></div>
+  <hr style="border:0;border-top:1px solid var(--line)">
+  <b>Gist 同步</b>
+  <p class="mut">貼上只有 <code>gist</code> 權限的 GitHub token（只存在這台裝置）。進度會存在私人 Gist 的 state.json。</p>
+  <input id="token" type="password" placeholder="GitHub token" style="width:100%" autocomplete="off">
+  <div class="actions" style="justify-content:flex-start">
+    <button type="button" id="syncNow">立即同步</button>
+    <button type="button" id="clearToken" class="danger">移除 token</button>
+  </div>
+  <div class="mut" id="gistInfo"></div>
+  <hr style="border:0;border-top:1px solid var(--line)">
+  <b>備份</b>
+  <div class="actions" style="justify-content:flex-start">
+    <button type="button" id="export">匯出</button>
+    <button type="button" id="import">匯入</button>
+  </div>
+  <div class="actions"><button class="pri" value="ok">關閉</button></div>
+</form></dialog>
+<input type="file" id="file" accept="application/json" hidden>
+
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+const PAGE = 200;
+const LS_STATE = "slr.state", LS_CFG = "slr.cfg";
+const GIST_FILE = "state.json";
+
+let POSTS = [];                 // from posts.json
+let S = load(LS_STATE, {items: {}, cats: {}});   // items[id] = {s:'r'|'k'|'', c:[catId], t}
+let CFG = load(LS_CFG, {token: "", gist: "", autoRead: false});
+let shown = PAGE, filtered = [], pending = null;
+
+function load(k, d) { try { return JSON.parse(localStorage.getItem(k)) || d; } catch { return d; } }
+const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const now = () => Date.now();
+const item = id => S.items[id] || {s: "", c: [], t: 0};
+const liveCats = () => Object.entries(S.cats).filter(([, c]) => !c.d).sort((a, b) => a[1].n.localeCompare(b[1].n, "zh-Hant"));
+
+// ---------- persistence & sync ----------
+let syncTimer = null;
+function save() {
+  localStorage.setItem(LS_STATE, JSON.stringify(S));
+  if (CFG.token) { clearTimeout(syncTimer); syncTimer = setTimeout(sync, 3000); setSync("尚未同步"); }
+}
+function saveCfg() { localStorage.setItem(LS_CFG, JSON.stringify(CFG)); }
+function setSync(t) { $("sync").textContent = t; }
+
+function merge(a, b) {            // newer timestamp wins, per post and per category
+  const out = {items: {}, cats: {}};
+  for (const k of ["items", "cats"]) {
+    for (const id of new Set([...Object.keys(a[k] || {}), ...Object.keys(b[k] || {})])) {
+      const x = (a[k] || {})[id], y = (b[k] || {})[id];
+      out[k][id] = !x ? y : !y ? x : (y.t > x.t ? y : x);
+    }
+  }
+  return out;
+}
+
+async function gh(path, opt = {}) {
+  const r = await fetch("https://api.github.com" + path, {
+    ...opt,
+    headers: {Authorization: "Bearer " + CFG.token, Accept: "application/vnd.github+json", "Content-Type": "application/json"}
+  });
+  if (!r.ok) throw new Error("GitHub " + r.status);
+  return r.json();
+}
+
+let syncing = false;
+async function sync() {
+  if (!CFG.token || syncing) return;
+  if (!navigator.onLine) { setSync("離線"); return; }
+  syncing = true; setSync("同步中…");
+  try {
+    if (!CFG.gist) {              // find an existing state gist, else create a secret one
+      for (let page = 1; page <= 5 && !CFG.gist; page++) {
+        const list = await gh("/gists?per_page=100&page=" + page);
+        const g = list.find(g => g.files && g.files[GIST_FILE] && g.description === "skylikesun-reader state");
+        if (g) CFG.gist = g.id;
+        if (list.length < 100) break;
+      }
+      if (!CFG.gist) {
+        const g = await gh("/gists", {method: "POST", body: JSON.stringify({
+          description: "skylikesun-reader state", public: false,
+          files: {[GIST_FILE]: {content: JSON.stringify(S)}}})});
+        CFG.gist = g.id;
+      }
+      saveCfg();
+    }
+    const g = await gh("/gists/" + CFG.gist);
+    let remote = {items: {}, cats: {}};
+    const f = g.files[GIST_FILE];
+    if (f) remote = JSON.parse(f.truncated ? await (await fetch(f.raw_url)).text() : f.content);
+    const merged = merge(S, remote);
+    const changedRemote = JSON.stringify(merge(remote, merged)) !== JSON.stringify(remote);
+    S = merged;
+    localStorage.setItem(LS_STATE, JSON.stringify(S));
+    if (changedRemote) await gh("/gists/" + CFG.gist, {method: "PATCH", body: JSON.stringify({files: {[GIST_FILE]: {content: JSON.stringify(S)}}})});
+    setSync("已同步 " + new Date().toLocaleTimeString([], {hour: "2-digit", minute: "2-digit"}));
+    render();
+  } catch (e) {
+    setSync("同步失敗：" + e.message);
+  } finally { syncing = false; }
+}
+
+// ---------- filtering ----------
+function buildSelects() {
+  const labels = new Map(), months = new Map();
+  for (const p of POSTS) {
+    for (const l of p.labels) labels.set(l, (labels.get(l) || 0) + 1);
+    const m = p.date.slice(0, 7); months.set(m, (months.get(m) || 0) + 1);
+  }
+  const keep = [$("fLabel").value, $("fMonth").value];
+  $("fLabel").innerHTML = '<option value="">全部原標籤</option><option value="__none">（無標籤）</option>' +
+    [...labels].sort((a, b) => b[1] - a[1]).map(([l, n]) => `<option value="${esc(l)}">${esc(l)} (${n})</option>`).join("");
+  $("fMonth").innerHTML = '<option value="">全部年月</option>' +
+    [...months].sort().reverse().map(([m, n]) => `<option value="${m}">${m} (${n})</option>`).join("");
+  $("fLabel").value = keep[0]; $("fMonth").value = keep[1];
+}
+function buildCatSelect() {
+  const keep = $("fCat").value;
+  $("fCat").innerHTML = '<option value="">全部分類</option><option value="__none">（未分類）</option>' +
+    liveCats().map(([id, c]) => `<option value="${id}">${esc(c.n)}</option>`).join("");
+  $("fCat").value = keep;
+}
+
+function applyFilter() {
+  const q = $("q").value.trim().toLowerCase(), st = $("fStatus").value, lb = $("fLabel").value,
+        ct = $("fCat").value, mo = $("fMonth").value;
+  const live = new Set(liveCats().map(([id]) => id));
+  filtered = POSTS.filter(p => {
+    const it = item(p.id);
+    if (st && (it.s || "u") !== st) return false;
+    if (lb === "__none" ? p.labels.length : lb && !p.labels.includes(lb)) return false;
+    if (mo && !p.date.startsWith(mo)) return false;
+    if (q && !p.title.toLowerCase().includes(q)) return false;
+    const cs = it.c.filter(c => live.has(c));
+    if (ct === "__none" ? cs.length : ct && !cs.includes(ct)) return false;
+    return true;
+  });
+  if ($("fSort").value === "a") filtered = filtered.slice().reverse();
+}
+
+// ---------- rendering ----------
+const NEXT = {"": "r", r: "k", k: ""};
+const LABEL = {"": "未讀", r: "已讀", k: "略過"};
+
+function render() {
+  applyFilter();
+  let r = 0, k = 0;
+  for (const p of POSTS) { const s = item(p.id).s; if (s === "r") r++; else if (s === "k") k++; }
+  $("nR").textContent = r; $("nK").textContent = k; $("nU").textContent = POSTS.length - r - k;
+  buildCatSelect();
+
+  const live = S.cats;
+  $("list").innerHTML = filtered.slice(0, shown).map(p => {
+    const it = item(p.id), s = it.s;
+    const cats = it.c.filter(c => live[c] && !live[c].d).map(c => `<span class="chip">${esc(live[c].n)}</span>`).join("");
+    return `<div class="row ${s === "r" ? "read" : s === "k" ? "skip" : ""}" data-id="${p.id}">
+      <button class="st ${s === "r" ? "read" : ""}" data-act="st" aria-label="切換狀態">${LABEL[s]}</button>
+      <div class="body"><a href="${esc(p.url)}" target="_blank" rel="noopener" data-act="open">${esc(p.title.trim() || "（無標題）")}</a>
+        <div class="meta">${p.date} · ${p.labels.map(esc).join(", ")}</div>
+        ${cats ? `<div class="meta">${cats}</div>` : ""}</div>
+      <button class="cat" data-act="cat" aria-label="分類">🏷</button>
+    </div>`;
+  }).join("") || '<p class="mut">沒有符合的文章。</p>';
+  $("more").style.display = filtered.length > shown ? "" : "none";
+  $("more").textContent = `顯示更多（還有 ${filtered.length - shown} 篇）`;
+
+  $("bulk").innerHTML = `<span>共 ${filtered.length} 篇　批次：</span>
+    <button data-bulk="r">全標已讀</button><button data-bulk="k">全標略過</button><button data-bulk="">全標未讀</button>
+    <button data-bulk="+cat">加入分類…</button><button data-bulk="-cat">移出分類…</button>`;
+}
+
+function setStatus(id, s) {
+  const it = item(id);
+  S.items[id] = {...it, s, t: now()};
+}
+function setCats(id, c) { S.items[id] = {...item(id), c, t: now()}; }
+
+// ---------- toast ----------
+let toastTimer;
+function toast(msg, btn, fn) {
+  $("toastMsg").textContent = msg;
+  $("toastBtn").style.display = btn ? "" : "none";
+  $("toastBtn").textContent = btn || ""; $("toastBtn").onclick = () => { $("toast").style.display = "none"; fn && fn(); };
+  $("toast").style.display = "flex";
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => $("toast").style.display = "none", 8000);
+}
+
+// ---------- category dialogs ----------
+let catMode = null;   // {type:'post', id} | {type:'bulk', add:bool} | {type:'manage'}
+function openCats(mode) {
+  catMode = mode; renderCatsDialog(); $("dlgCats").returnValue = ""; $("dlgCats").showModal();
+}
+function renderCatsDialog() {
+  const m = catMode, cats = liveCats();
+  $("dlgCatsTitle").textContent = m.type === "manage" ? "管理分類" : m.type === "bulk" ? (m.add ? "批次加入分類" : "批次移出分類") : "文章分類";
+  if (m.type === "manage") {
+    $("catsBody").innerHTML = cats.map(([id, c]) => `<div class="catrow" data-cid="${id}">
+      <input value="${esc(c.n)}" data-act="rename"><button type="button" class="danger" data-act="del">刪除</button></div>`).join("") || '<p class="mut">還沒有分類。</p>';
+  } else if (m.type === "post") {
+    const has = new Set(item(m.id).c);
+    $("catsBody").innerHTML = cats.map(([id, c]) => `<label><input type="checkbox" data-cid="${id}" ${has.has(id) ? "checked" : ""}>${esc(c.n)}</label>`).join("") || '<p class="mut">還沒有分類，請在下方新增。</p>';
+  } else {
+    $("catsBody").innerHTML = cats.map(([id, c]) => `<label><input type="radio" name="bc" value="${id}">${esc(c.n)}</label>`).join("") || '<p class="mut">還沒有分類，請在下方新增。</p>';
+  }
+}
+$("addCat").onclick = () => {
+  const n = $("newCat").value.trim(); if (!n) return;
+  if (liveCats().some(([, c]) => c.n === n)) { toast("分類已存在"); return; }
+  const id = "c" + now().toString(36) + Math.random().toString(36).slice(2, 5);
+  S.cats[id] = {n, t: now()};
+  if (catMode.type === "post") setCats(catMode.id, [...item(catMode.id).c, id]);
+  $("newCat").value = ""; save(); renderCatsDialog(); render();
+};
+$("catsBody").addEventListener("change", e => {
+  const t = e.target;
+  if (catMode.type === "post" && t.dataset.cid) {
+    const set = new Set(item(catMode.id).c);
+    t.checked ? set.add(t.dataset.cid) : set.delete(t.dataset.cid);
+    setCats(catMode.id, [...set]); save(); render();
+  } else if (t.dataset.act === "rename") {
+    const id = t.closest("[data-cid]").dataset.cid, n = t.value.trim();
+    if (n) { S.cats[id] = {...S.cats[id], n, t: now()}; save(); render(); } else t.value = S.cats[id].n;
+  }
+});
+$("catsBody").addEventListener("click", e => {
+  if (e.target.dataset.act !== "del") return;
+  const id = e.target.closest("[data-cid]").dataset.cid;
+  if (!confirm(`刪除分類「${S.cats[id].n}」？文章不會被刪除。`)) return;
+  S.cats[id] = {...S.cats[id], d: 1, t: now()}; save(); renderCatsDialog(); render();
+});
+$("dlgCats").addEventListener("close", () => {
+  if (catMode.type === "bulk") {
+    const sel = document.querySelector('#catsBody input[name=bc]:checked');
+    if ($("dlgCats").returnValue === "ok" && sel) {
+      const cid = sel.value;
+      for (const p of filtered) {
+        const set = new Set(item(p.id).c);
+        catMode.add ? set.add(cid) : set.delete(cid);
+        setCats(p.id, [...set]);
+      }
+      save(); render(); toast(`已套用到 ${filtered.length} 篇`);
+    }
+  }
+  catMode = null;
+});
+
+// ---------- events ----------
+$("list").addEventListener("click", e => {
+  const row = e.target.closest(".row"); if (!row) return;
+  const id = row.dataset.id, act = e.target.closest("[data-act]")?.dataset.act;
+  if (act === "st") { setStatus(id, NEXT[item(id).s]); save(); render(); }
+  else if (act === "cat") openCats({type: "post", id});
+  else if (act === "open") {
+    if (CFG.autoRead && item(id).s !== "r") { setStatus(id, "r"); save(); render(); }
+    else if (!CFG.autoRead && !item(id).s) pending = id;
+  }
+});
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState !== "visible") return;
+  if (pending) {
+    const id = pending; pending = null;
+    const p = POSTS.find(p => p.id === id);
+    toast("標記「" + p.title.trim().slice(0, 14) + "」為已讀？", "標已讀", () => { setStatus(id, "r"); save(); render(); });
+  }
+  sync();
+});
+
+// swipe: right = read, left = skip
+let tx = null, ty = null;
+$("list").addEventListener("touchstart", e => { tx = e.touches[0].clientX; ty = e.touches[0].clientY; }, {passive: true});
+$("list").addEventListener("touchend", e => {
+  if (tx === null) return;
+  const dx = e.changedTouches[0].clientX - tx, dy = e.changedTouches[0].clientY - ty; tx = null;
+  const row = e.target.closest(".row");
+  if (!row || Math.abs(dx) < 90 || Math.abs(dy) > 40) return;
+  const id = row.dataset.id, want = dx > 0 ? "r" : "k";
+  setStatus(id, item(id).s === want ? "" : want); save(); render();
+});
+
+$("bulk").addEventListener("click", e => {
+  const v = e.target.dataset.bulk; if (v === undefined) return;
+  if (v === "+cat" || v === "-cat") return openCats({type: "bulk", add: v === "+cat"});
+  if (!filtered.length || !confirm(`把目前篩選的 ${filtered.length} 篇全部標為「${LABEL[v]}」？`)) return;
+  for (const p of filtered) setStatus(p.id, v);
+  save(); render(); toast(`已更新 ${filtered.length} 篇`);
+});
+
+for (const id of ["q", "fStatus", "fLabel", "fCat", "fMonth", "fSort"])
+  $(id).addEventListener(id === "q" ? "input" : "change", () => { shown = PAGE; render(); });
+$("more").onclick = () => { shown += PAGE; render(); };
+
+// menu
+$("btnMenu").onclick = () => {
+  $("autoRead").checked = CFG.autoRead; $("token").value = CFG.token;
+  $("gistInfo").textContent = CFG.gist ? "Gist：" + CFG.gist : "";
+  $("dlgMenu").showModal();
+};
+$("autoRead").onchange = e => { CFG.autoRead = e.target.checked; saveCfg(); };
+$("manageCats").onclick = () => { $("dlgMenu").close(); openCats({type: "manage"}); };
+$("syncNow").onclick = () => {
+  const t = $("token").value.trim();
+  if (t !== CFG.token) { CFG.token = t; CFG.gist = ""; }
+  saveCfg(); sync();
+};
+$("clearToken").onclick = () => { CFG.token = ""; CFG.gist = ""; saveCfg(); $("token").value = ""; setSync(""); $("gistInfo").textContent = ""; };
+$("export").onclick = () => {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(S, null, 1)], {type: "application/json"}));
+  a.download = "state.json"; a.click(); URL.revokeObjectURL(a.href);
+};
+$("import").onclick = () => $("file").click();
+$("file").onchange = async e => {
+  const f = e.target.files[0]; e.target.value = ""; if (!f) return;
+  try {
+    const d = JSON.parse(await f.text());
+    if (!d.items || !d.cats) throw 0;
+    S = merge(S, d); save(); render(); toast("已匯入並合併");
+  } catch { alert("檔案格式不正確"); }
+};
+
+// ---------- init ----------
+fetch("posts.json").then(r => r.json()).then(p => {
+  POSTS = p; buildSelects(); render(); sync();
+}).catch(() => $("list").innerHTML = '<p class="mut">無法載入 posts.json。請先執行 fetch_posts.py，並用 HTTP 伺服器開啟（不是 file://）。</p>');
+</script>
+</body>
+</html>
