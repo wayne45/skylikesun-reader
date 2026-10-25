@@ -22,7 +22,8 @@ button.pri{background:var(--acc);color:#fff;border-color:var(--acc)}
 button.danger{color:#dc2626}
 .filters[hidden]{display:none}
 .hideopt{display:flex;gap:6px;align-items:center;font-size:14px;min-height:40px}
-.hideopt input{min-height:0;width:20px;height:20px}
+.hideopt input[type=checkbox]{min-height:0;width:20px;height:20px}
+.hideopt{grid-column:1/-1}
 .qrow{display:flex;gap:6px;margin-top:8px}
 #q{flex:1;min-width:0}
 #btnFilter{white-space:nowrap}
@@ -78,7 +79,7 @@ button.link{background:none;border:0;color:var(--mut);font-size:13px;text-decora
     <select id="fCat"></select>
     <select id="fMonth"></select>
     <select id="fSort"><option value="d">新到舊</option><option value="a">舊到新</option></select>
-    <label class="hideopt"><input type="checkbox" id="fHide"> 隱藏已讀／略過</label>
+    <label class="hideopt"><input type="checkbox" id="fHide"> 隱藏已讀／略過，保留最近 <input type="number" id="fKeep" min="0" max="50" style="width:56px;min-height:32px;padding:2px 6px"> 篇</label>
   </div>
 </header>
 <main>
@@ -138,6 +139,7 @@ const now = () => Date.now();
 const item = id => S.items[id] || {s: "", c: [], t: 0};
 const P = () => S.prefs || {};      // synced preferences: {sort:'d'|'a', hideDone, autoRead, t}
 function setPref(k, v) { S.prefs = {...P(), [k]: v, t: now()}; save(); }
+const keepN = () => P().keepN ?? 5;
 const liveCats = () => Object.entries(S.cats).filter(([, c]) => !c.d).sort((a, b) => a[1].n.localeCompare(b[1].n, "zh-Hant"));
 
 // ---------- persistence & sync ----------
@@ -233,9 +235,14 @@ function applyFilter() {
   const q = $("q").value.trim().toLowerCase(), st = $("fStatus").value, lb = $("fLabel").value,
         ct = $("fCat").value, mo = $("fMonth").value;
   const live = new Set(liveCats().map(([id]) => id));
+  const recent = new Set();       // most recently read/skipped posts stay visible while hiding
+  if (P().hideDone && !st) {
+    Object.entries(S.items).filter(([, i]) => i.s).sort((a, b) => b[1].t - a[1].t)
+      .slice(0, keepN()).forEach(([id]) => recent.add(id));
+  }
   filtered = POSTS.filter(p => {
     const it = item(p.id);
-    if (st ? (it.s || "u") !== st : P().hideDone && it.s) return false;
+    if (st ? (it.s || "u") !== st : P().hideDone && it.s && !recent.has(p.id)) return false;
     if (lb === "__none" ? p.labels.length : lb && !p.labels.includes(lb)) return false;
     if (mo && !p.date.startsWith(mo)) return false;
     if (q && !p.title.toLowerCase().includes(q)) return false;
@@ -251,7 +258,7 @@ const NEXT = {"": "r", r: "k", k: ""};
 const LABEL = {"": "未讀", r: "已讀", k: "略過"};
 
 function render() {
-  $("fSort").value = P().sort || "d"; $("fHide").checked = !!P().hideDone;
+  $("fSort").value = P().sort || "d"; $("fHide").checked = !!P().hideDone; $("fKeep").value = keepN();
   applyFilter();
   let r = 0, k = 0;
   for (const p of POSTS) { const s = item(p.id).s; if (s === "r") r++; else if (s === "k") k++; }
@@ -408,6 +415,7 @@ $("bulk").addEventListener("click", e => {
 for (const id of ["q", "fStatus", "fLabel", "fCat", "fMonth"])
   $(id).addEventListener(id === "q" ? "input" : "change", () => { shown = PAGE; render(); });
 $("fHide").onchange = e => { setPref("hideDone", e.target.checked); shown = PAGE; render(); };
+$("fKeep").onchange = e => { const n = Math.max(0, Math.min(50, parseInt(e.target.value) || 0)); setPref("keepN", n); render(); };
 $("fSort").addEventListener("change", () => { setPref("sort", $("fSort").value); shown = PAGE; render(); });
 $("more").onclick = () => { shown += PAGE; render(); };
 $("btnFilter").onclick = () => { $("filterBox").hidden = !$("filterBox").hidden; updateFilterBtn(); };
