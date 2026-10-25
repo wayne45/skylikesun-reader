@@ -48,8 +48,14 @@ dialog label input[type=checkbox]{min-height:0;width:20px;height:20px}
 dialog .actions{display:flex;gap:8px;justify-content:flex-end;margin-top:12px;flex-wrap:wrap}
 .catrow{display:flex;gap:6px;margin:6px 0}
 .catrow input{flex:1;min-width:0}
+.catrow.mg{align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--line)}
+.catrow.mg:last-child{border-bottom:0}
+.catrow.mg .cnt{flex:none;min-width:3.2em;text-align:right;font-size:13px;color:var(--mut);white-space:nowrap}
+.catrow.mg button{flex:none;white-space:nowrap}
+#catsBody{max-height:50vh;overflow-y:auto}
 #toast{position:fixed;left:50%;bottom:calc(16px + env(safe-area-inset-bottom));transform:translateX(-50%);background:#111827;color:#fff;border-radius:10px;padding:10px 14px;display:none;gap:10px;align-items:center;z-index:20;max-width:92vw}
 #toast button{min-height:32px;padding:2px 10px;background:#374151;color:#fff;border-color:#4b5563}
+button.link{background:none;border:0;color:var(--mut);font-size:13px;text-decoration:underline;padding:8px 0}
 .mut{color:var(--mut);font-size:13px}
 #sync{font-size:12px;color:var(--mut)}
 </style>
@@ -87,7 +93,7 @@ dialog .actions{display:flex;gap:8px;justify-content:flex-end;margin-top:12px;fl
   <h3 style="margin-top:0" id="dlgCatsTitle">分類</h3>
   <div id="catsBody"></div>
   <div class="catrow"><input id="newCat" placeholder="新分類名稱"><button type="button" id="addCat">新增</button></div>
-  <div class="actions"><button class="pri" value="ok">完成</button></div>
+  <div class="actions" style="justify-content:space-between;align-items:center"><button type="button" id="toManage" class="link">編輯分類</button><button class="pri" value="ok">完成</button></div>
 </form></dialog>
 
 <dialog id="dlgMenu"><form method="dialog">
@@ -286,14 +292,16 @@ function toast(msg, btn, fn) {
 // ---------- category dialogs ----------
 let catMode = null;   // {type:'post', id} | {type:'bulk', add:bool} | {type:'manage'}
 function openCats(mode) {
-  catMode = mode; renderCatsDialog(); $("dlgCats").returnValue = ""; $("dlgCats").showModal();
+  catMode = mode; $("toManage").hidden = mode.type === "manage"; renderCatsDialog(); $("dlgCats").returnValue = ""; $("dlgCats").showModal();
 }
 function renderCatsDialog() {
   const m = catMode, cats = liveCats();
   $("dlgCatsTitle").textContent = m.type === "manage" ? "管理分類" : m.type === "bulk" ? (m.add ? "批次加入分類" : "批次移出分類") : "文章分類";
   if (m.type === "manage") {
-    $("catsBody").innerHTML = cats.map(([id, c]) => `<div class="catrow" data-cid="${id}">
-      <input value="${esc(c.n)}" data-act="rename"><button type="button" class="danger" data-act="del">刪除</button></div>`).join("") || '<p class="mut">還沒有分類。</p>';
+    const cnt = {};
+    for (const it of Object.values(S.items)) for (const c of it.c || []) cnt[c] = (cnt[c] || 0) + 1;
+    $("catsBody").innerHTML = cats.map(([id, c]) => `<div class="catrow mg" data-cid="${id}">
+      <input value="${esc(c.n)}" data-act="rename" aria-label="分類名稱"><span class="cnt">${cnt[id] || 0} 篇</span><button type="button" class="danger" data-act="del">刪除</button></div>`).join("") || '<p class="mut">還沒有分類。</p>';
   } else if (m.type === "post") {
     const has = new Set(item(m.id).c);
     $("catsBody").innerHTML = cats.map(([id, c]) => `<label><input type="checkbox" data-cid="${id}" ${has.has(id) ? "checked" : ""}>${esc(c.n)}</label>`).join("") || '<p class="mut">還沒有分類，請在下方新增。</p>';
@@ -301,6 +309,7 @@ function renderCatsDialog() {
     $("catsBody").innerHTML = cats.map(([id, c]) => `<label><input type="radio" name="bc" value="${id}">${esc(c.n)}</label>`).join("") || '<p class="mut">還沒有分類，請在下方新增。</p>';
   }
 }
+$("toManage").onclick = () => { catMode = {type: "manage"}; renderCatsDialog(); $("toManage").hidden = true; };
 $("addCat").onclick = () => {
   const n = $("newCat").value.trim(); if (!n) return;
   if (liveCats().some(([, c]) => c.n === n)) { toast("分類已存在"); return; }
@@ -317,7 +326,8 @@ $("catsBody").addEventListener("change", e => {
     setCats(catMode.id, [...set]); save(); render();
   } else if (t.dataset.act === "rename") {
     const id = t.closest("[data-cid]").dataset.cid, n = t.value.trim();
-    if (n) { S.cats[id] = {...S.cats[id], n, t: now()}; save(); render(); } else t.value = S.cats[id].n;
+    if (n && liveCats().some(([i, c]) => i !== id && c.n === n)) { toast("分類已存在"); t.value = S.cats[id].n; }
+    else if (n) { S.cats[id] = {...S.cats[id], n, t: now()}; save(); render(); } else t.value = S.cats[id].n;
   }
 });
 $("catsBody").addEventListener("click", e => {
