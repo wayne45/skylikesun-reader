@@ -21,6 +21,8 @@ button{cursor:pointer}
 button.pri{background:var(--acc);color:#fff;border-color:var(--acc)}
 button.danger{color:#dc2626}
 .filters[hidden]{display:none}
+.hideopt{display:flex;gap:6px;align-items:center;font-size:14px;min-height:40px}
+.hideopt input{min-height:0;width:20px;height:20px}
 .qrow{display:flex;gap:6px;margin-top:8px}
 #q{flex:1;min-width:0}
 #btnFilter{white-space:nowrap}
@@ -70,6 +72,7 @@ dialog .actions{display:flex;gap:8px;justify-content:flex-end;margin-top:12px;fl
     <select id="fCat"></select>
     <select id="fMonth"></select>
     <select id="fSort"><option value="d">新到舊</option><option value="a">舊到新</option></select>
+    <label class="hideopt"><input type="checkbox" id="fHide"> 隱藏已讀／略過</label>
   </div>
 </header>
 <main>
@@ -221,7 +224,7 @@ function applyFilter() {
   const live = new Set(liveCats().map(([id]) => id));
   filtered = POSTS.filter(p => {
     const it = item(p.id);
-    if (st && (it.s || "u") !== st) return false;
+    if (st ? (it.s || "u") !== st : CFG.hideDone && it.s) return false;
     if (lb === "__none" ? p.labels.length : lb && !p.labels.includes(lb)) return false;
     if (mo && !p.date.startsWith(mo)) return false;
     if (q && !p.title.toLowerCase().includes(q)) return false;
@@ -343,7 +346,11 @@ $("dlgCats").addEventListener("close", () => {
 $("list").addEventListener("click", e => {
   const row = e.target.closest(".row"); if (!row) return;
   const id = row.dataset.id, act = e.target.closest("[data-act]")?.dataset.act;
-  if (act === "st") { setStatus(id, NEXT[item(id).s]); save(); render(); }
+  if (act === "st") {
+    const prev = item(id).s; setStatus(id, NEXT[prev]); save(); render();
+    if (CFG.hideDone && !$("fStatus").value && NEXT[prev])
+      toast("已" + LABEL[NEXT[prev]] + "並隱藏", "復原", () => { setStatus(id, prev); save(); render(); });
+  }
   else if (act === "cat") openCats({type: "post", id});
   else if (act === "open") {
     if (CFG.autoRead && item(id).s !== "r") { setStatus(id, "r"); save(); render(); }
@@ -369,7 +376,9 @@ $("list").addEventListener("touchend", e => {
   const row = e.target.closest(".row");
   if (!row || Math.abs(dx) < 90 || Math.abs(dy) > 40) return;
   const id = row.dataset.id, want = dx > 0 ? "r" : "k";
-  setStatus(id, item(id).s === want ? "" : want); save(); render();
+  const prev = item(id).s; setStatus(id, prev === want ? "" : want); save(); render();
+  if (CFG.hideDone && !$("fStatus").value && prev !== want)
+    toast("已" + LABEL[want] + "並隱藏", "復原", () => { setStatus(id, prev); save(); render(); });
 });
 
 $("bulk").addEventListener("click", e => {
@@ -382,10 +391,11 @@ $("bulk").addEventListener("click", e => {
 
 for (const id of ["q", "fStatus", "fLabel", "fCat", "fMonth", "fSort"])
   $(id).addEventListener(id === "q" ? "input" : "change", () => { shown = PAGE; render(); });
+$("fHide").onchange = e => { CFG.hideDone = e.target.checked; saveCfg(); shown = PAGE; render(); };
 $("more").onclick = () => { shown += PAGE; render(); };
 $("btnFilter").onclick = () => { $("filterBox").hidden = !$("filterBox").hidden; updateFilterBtn(); };
 function updateFilterBtn() {
-  const n = ["fStatus", "fLabel", "fCat", "fMonth"].filter(id => $(id).value).length + ($("fSort").value === "a" ? 1 : 0);
+  const n = ["fStatus", "fLabel", "fCat", "fMonth"].filter(id => $(id).value).length + ($("fSort").value === "a" ? 1 : 0) + (CFG.hideDone ? 1 : 0);
   const open = !$("filterBox").hidden;
   $("btnFilter").textContent = "篩選" + (n ? ` (${n})` : "") + (open ? " ▴" : " ▾");
   $("btnFilter").classList.toggle("on", n > 0);
@@ -422,6 +432,7 @@ $("file").onchange = async e => {
 };
 
 // ---------- init ----------
+$("fHide").checked = !!CFG.hideDone;
 fetch("posts.json").then(r => r.json()).then(p => {
   POSTS = p; buildSelects(); render(); sync();
 }).catch(() => $("list").innerHTML = '<p class="mut">無法載入 posts.json。請先執行 fetch_posts.py，並用 HTTP 伺服器開啟（不是 file://）。</p>');
