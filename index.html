@@ -129,12 +129,15 @@ const GIST_FILE = "state.json";
 let POSTS = [];                 // from posts.json
 let S = load(LS_STATE, {items: {}, cats: {}});   // items[id] = {s:'r'|'k'|'', c:[catId], t}
 let CFG = load(LS_CFG, {token: "", gist: "", autoRead: false});
+if (!S.prefs && (CFG.autoRead || CFG.hideDone)) S.prefs = {autoRead: !!CFG.autoRead, hideDone: !!CFG.hideDone, t: 1};   // migrate old local settings
 let shown = PAGE, filtered = [], pending = null;
 
 function load(k, d) { try { return JSON.parse(localStorage.getItem(k)) || d; } catch { return d; } }
 const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const now = () => Date.now();
 const item = id => S.items[id] || {s: "", c: [], t: 0};
+const P = () => S.prefs || {};      // synced preferences: {sort:'d'|'a', hideDone, autoRead, t}
+function setPref(k, v) { S.prefs = {...P(), [k]: v, t: now()}; save(); }
 const liveCats = () => Object.entries(S.cats).filter(([, c]) => !c.d).sort((a, b) => a[1].n.localeCompare(b[1].n, "zh-Hant"));
 
 // ---------- persistence & sync ----------
@@ -148,6 +151,8 @@ function setSync(t) { $("sync").textContent = t; }
 
 function merge(a, b) {            // newer timestamp wins, per post and per category
   const out = {items: {}, cats: {}};
+  const pa = a.prefs, pb = b.prefs;
+  if (pa || pb) out.prefs = !pa ? pb : !pb ? pa : (pb.t > pa.t ? pb : pa);
   for (const k of ["items", "cats"]) {
     for (const id of new Set([...Object.keys(a[k] || {}), ...Object.keys(b[k] || {})])) {
       const x = (a[k] || {})[id], y = (b[k] || {})[id];
@@ -230,7 +235,7 @@ function applyFilter() {
   const live = new Set(liveCats().map(([id]) => id));
   filtered = POSTS.filter(p => {
     const it = item(p.id);
-    if (st ? (it.s || "u") !== st : CFG.hideDone && it.s) return false;
+    if (st ? (it.s || "u") !== st : P().hideDone && it.s) return false;
     if (lb === "__none" ? p.labels.length : lb && !p.labels.includes(lb)) return false;
     if (mo && !p.date.startsWith(mo)) return false;
     if (q && !p.title.toLowerCase().includes(q)) return false;
@@ -246,6 +251,7 @@ const NEXT = {"": "r", r: "k", k: ""};
 const LABEL = {"": "未讀", r: "已讀", k: "略過"};
 
 function render() {
+  $("fSort").value = P().sort || "d"; $("fHide").checked = !!P().hideDone;
   applyFilter();
   let r = 0, k = 0;
   for (const p of POSTS) { const s = item(p.id).s; if (s === "r") r++; else if (s === "k") k++; }
@@ -358,13 +364,13 @@ $("list").addEventListener("click", e => {
   const id = row.dataset.id, act = e.target.closest("[data-act]")?.dataset.act;
   if (act === "st") {
     const prev = item(id).s; setStatus(id, NEXT[prev]); save(); render();
-    if (CFG.hideDone && !$("fStatus").value && NEXT[prev])
+    if (P().hideDone && !$("fStatus").value && NEXT[prev])
       toast("已" + LABEL[NEXT[prev]] + "並隱藏", "復原", () => { setStatus(id, prev); save(); render(); });
   }
   else if (act === "cat") openCats({type: "post", id});
   else if (act === "open") {
-    if (CFG.autoRead && item(id).s !== "r") { setStatus(id, "r"); save(); render(); }
-    else if (!CFG.autoRead && !item(id).s) pending = id;
+    if (P().autoRead && item(id).s !== "r") { setStatus(id, "r"); save(); render(); }
+    else if (!P().autoRead && !item(id).s) pending = id;
   }
 });
 document.addEventListener("visibilitychange", () => {
@@ -387,7 +393,7 @@ $("list").addEventListener("touchend", e => {
   if (!row || Math.abs(dx) < 90 || Math.abs(dy) > 40) return;
   const id = row.dataset.id, want = dx > 0 ? "r" : "k";
   const prev = item(id).s; setStatus(id, prev === want ? "" : want); save(); render();
-  if (CFG.hideDone && !$("fStatus").value && prev !== want)
+  if (P().hideDone && !$("fStatus").value && prev !== want)
     toast("已" + LABEL[want] + "並隱藏", "復原", () => { setStatus(id, prev); save(); render(); });
 });
 
@@ -399,13 +405,14 @@ $("bulk").addEventListener("click", e => {
   save(); render(); toast(`已更新 ${filtered.length} 篇`);
 });
 
-for (const id of ["q", "fStatus", "fLabel", "fCat", "fMonth", "fSort"])
+for (const id of ["q", "fStatus", "fLabel", "fCat", "fMonth"])
   $(id).addEventListener(id === "q" ? "input" : "change", () => { shown = PAGE; render(); });
-$("fHide").onchange = e => { CFG.hideDone = e.target.checked; saveCfg(); shown = PAGE; render(); };
+$("fHide").onchange = e => { setPref("hideDone", e.target.checked); shown = PAGE; render(); };
+$("fSort").addEventListener("change", () => { setPref("sort", $("fSort").value); shown = PAGE; render(); });
 $("more").onclick = () => { shown += PAGE; render(); };
 $("btnFilter").onclick = () => { $("filterBox").hidden = !$("filterBox").hidden; updateFilterBtn(); };
 function updateFilterBtn() {
-  const n = ["fStatus", "fLabel", "fCat", "fMonth"].filter(id => $(id).value).length + ($("fSort").value === "a" ? 1 : 0) + (CFG.hideDone ? 1 : 0);
+  const n = ["fStatus", "fLabel", "fCat", "fMonth"].filter(id => $(id).value).length + (P().sort === "a" ? 1 : 0) + (P().hideDone ? 1 : 0);
   const open = !$("filterBox").hidden;
   $("btnFilter").textContent = "篩選" + (n ? ` (${n})` : "") + (open ? " ▴" : " ▾");
   $("btnFilter").classList.toggle("on", n > 0);
@@ -414,11 +421,11 @@ function updateFilterBtn() {
 
 // menu
 $("btnMenu").onclick = () => {
-  $("autoRead").checked = CFG.autoRead; $("token").value = CFG.token;
+  $("autoRead").checked = !!P().autoRead; $("token").value = CFG.token;
   $("gistInfo").textContent = CFG.gist ? "Gist：" + CFG.gist : "";
   $("dlgMenu").showModal();
 };
-$("autoRead").onchange = e => { CFG.autoRead = e.target.checked; saveCfg(); };
+$("autoRead").onchange = e => setPref("autoRead", e.target.checked);
 $("manageCats").onclick = () => { $("dlgMenu").close(); openCats({type: "manage"}); };
 $("syncNow").onclick = () => {
   const t = $("token").value.trim();
@@ -442,7 +449,6 @@ $("file").onchange = async e => {
 };
 
 // ---------- init ----------
-$("fHide").checked = !!CFG.hideDone;
 fetch("posts.json").then(r => r.json()).then(p => {
   POSTS = p; buildSelects(); render(); sync();
 }).catch(() => $("list").innerHTML = '<p class="mut">無法載入 posts.json。請先執行 fetch_posts.py，並用 HTTP 伺服器開啟（不是 file://）。</p>');
