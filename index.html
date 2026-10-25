@@ -20,7 +20,11 @@ input,select,button,textarea{font:inherit;color:inherit;background:var(--card);b
 button{cursor:pointer}
 button.pri{background:var(--acc);color:#fff;border-color:var(--acc)}
 button.danger{color:#dc2626}
-#q{grid-column:1/-1}
+.filters[hidden]{display:none}
+.qrow{display:flex;gap:6px;margin-top:8px}
+#q{flex:1;min-width:0}
+#btnFilter{white-space:nowrap}
+#btnFilter.on{color:var(--acc);border-color:var(--acc)}
 main{max-width:900px;margin:0 auto;padding:8px 8px 80px}
 .row{display:flex;gap:8px;align-items:center;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px;margin:6px 0;touch-action:pan-y}
 .row .body{flex:1;min-width:0}
@@ -56,8 +60,11 @@ dialog .actions{display:flex;gap:8px;justify-content:flex-end;margin-top:12px;fl
     <span id="sync"></span>
     <button id="btnMenu">⚙︎</button>
   </div>
-  <div class="filters">
+  <div class="qrow">
     <input id="q" type="search" placeholder="搜尋標題…">
+    <button id="btnFilter" aria-expanded="false">篩選 ▾</button>
+  </div>
+  <div class="filters" id="filterBox" hidden>
     <select id="fStatus"><option value="">全部狀態</option><option value="u">未讀</option><option value="r">已讀</option><option value="k">略過</option></select>
     <select id="fLabel"></select>
     <select id="fCat"></select>
@@ -235,6 +242,7 @@ function render() {
   for (const p of POSTS) { const s = item(p.id).s; if (s === "r") r++; else if (s === "k") k++; }
   $("nR").textContent = r; $("nK").textContent = k; $("nU").textContent = POSTS.length - r - k;
   buildCatSelect();
+  updateFilterBtn();
 
   const live = S.cats;
   $("list").innerHTML = filtered.slice(0, shown).map(p => {
@@ -375,6 +383,14 @@ $("bulk").addEventListener("click", e => {
 for (const id of ["q", "fStatus", "fLabel", "fCat", "fMonth", "fSort"])
   $(id).addEventListener(id === "q" ? "input" : "change", () => { shown = PAGE; render(); });
 $("more").onclick = () => { shown += PAGE; render(); };
+$("btnFilter").onclick = () => { $("filterBox").hidden = !$("filterBox").hidden; updateFilterBtn(); };
+function updateFilterBtn() {
+  const n = ["fStatus", "fLabel", "fCat", "fMonth"].filter(id => $(id).value).length + ($("fSort").value === "a" ? 1 : 0);
+  const open = !$("filterBox").hidden;
+  $("btnFilter").textContent = "篩選" + (n ? ` (${n})` : "") + (open ? " ▴" : " ▾");
+  $("btnFilter").classList.toggle("on", n > 0);
+  $("btnFilter").setAttribute("aria-expanded", open);
+}
 
 // menu
 $("btnMenu").onclick = () => {
