@@ -137,9 +137,9 @@ function load(k, d) { try { return JSON.parse(localStorage.getItem(k)) || d; } c
 const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const now = () => Date.now();
 const item = id => S.items[id] || {s: "", c: [], t: 0};
-const P = () => S.prefs || {};      // synced preferences: {sort:'d'|'a', hideDone, autoRead, t}
+const P = () => ({autoRead: true, ...S.prefs});    // synced preferences: {sort:'d'|'a', hideDone, autoRead, t}
 function setPref(k, v) { S.prefs = {...P(), [k]: v, t: now()}; save(); }
-const keepN = () => P().keepN ?? 5;
+const keepN = () => P().keepN ?? 3;
 const liveCats = () => Object.entries(S.cats).filter(([, c]) => !c.d).sort((a, b) => a[1].n.localeCompare(b[1].n, "zh-Hant"));
 
 // ---------- persistence & sync ----------
