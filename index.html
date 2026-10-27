@@ -371,8 +371,6 @@ $("list").addEventListener("click", e => {
   const id = row.dataset.id, act = e.target.closest("[data-act]")?.dataset.act;
   if (act === "st") {
     const prev = item(id).s; setStatus(id, NEXT[prev]); save(); render();
-    if (P().hideDone && !$("fStatus").value && NEXT[prev])
-      toast("已" + LABEL[NEXT[prev]] + "並隱藏", "復原", () => { setStatus(id, prev); save(); render(); });
   }
   else if (act === "cat") openCats({type: "post", id});
   else if (act === "open") {
@@ -400,8 +398,6 @@ $("list").addEventListener("touchend", e => {
   if (!row || Math.abs(dx) < 90 || Math.abs(dy) > 40) return;
   const id = row.dataset.id, want = dx > 0 ? "r" : "k";
   const prev = item(id).s; setStatus(id, prev === want ? "" : want); save(); render();
-  if (P().hideDone && !$("fStatus").value && prev !== want)
-    toast("已" + LABEL[want] + "並隱藏", "復原", () => { setStatus(id, prev); save(); render(); });
 });
 
 $("bulk").addEventListener("click", e => {
